@@ -1,0 +1,12 @@
+## Interface: 11200
+## Title: Octo Battle Report
+## Notes: Lightweight personal combat reports, live and after each fight.
+## Author: Local
+## Version: 1.3.1
+## SavedVariablesPerCharacter: OctoBattleReportDB
+
+Core.lua
+Average.lua
+Resources.lua
+Parser.lua
+UI.lua
