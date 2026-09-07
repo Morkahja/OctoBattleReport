@@ -10,6 +10,7 @@ R.Row = row
 function R.Init()
   if type(OctoBattleReportDB) ~= "table" then OctoBattleReportDB = {} end
   R.db = OctoBattleReportDB
+  if R.db.quickReport==nil then R.db.quickReport=true end
   R.db.history = R.db.history or {}
   R.db.sources = R.db.sources or {}
   R.history = R.db.history
@@ -26,6 +27,7 @@ function R.New(now)
     timeline={}, binWidth=1, castMode=R.enhanced and "Server-confirmed casts" or "Cast-time completions only" }
 end
 function R.Start(now)
+  if R.EndPrompt then R.EndPrompt() end
   if R.current then R.ending=nil; return end
   R.current=R.New(now)
   if R.view~=-1 then R.view=0; R.offset=0 end
@@ -35,7 +37,7 @@ function R.Start(now)
     if now-e.time <= 2 then R.Record(e, true) end
   end
 end
-function R.Finish(now)
+function R.Finish(now, silent)
   local f=R.current
   if not f then return end
   f.duration=math.max(0.1, (now or f.last)-f.start)
@@ -49,6 +51,7 @@ function R.Finish(now)
   end
   R.current=nil; R.ending=nil; R.pending={}
   if R.view~=-1 then R.view=0 end
+  if f.id and not silent and R.ShowPrompt then R.ShowPrompt(f) end
 end
 function R.Timeline(f, e)
   local age=math.max(0,e.time-f.start)

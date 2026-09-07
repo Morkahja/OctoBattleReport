@@ -22,6 +22,10 @@ function methods:SetScript(k,v) self.scripts[k]=v end
 function methods:RegisterEvent(k) self.events[k]=true end
 function methods:SetWidth(v) assert(v>0); self.width=v end
 function methods:SetHeight(v) assert(v>0); self.height=v end
+function methods:GetHeight() return self.height or 900 end
+function methods:SetAlpha(v) assert(v>=0 and v<=1); self.alpha=v end
+function methods:SetChecked(v) self.checked=v end
+function methods:GetChecked() return self.checked end
 function methods:SetText(v) self.text=v end
 function methods:Show() self.shown=true end
 function methods:Hide() self.shown=false end
@@ -286,4 +290,48 @@ assert(table.getn(R.history)==100 and R.GetAverage().fights==100)
 R.view=100; R.Browse(1); assert(R.view==100)
 R.ResetAverage(); R.tab="Overview"; R.Refresh(); assert(R.rowCount==0)
 print("PASS: recovery totals/timing/source separation, regeneration exclusions, average denominators, immutable reports, arrow direction, reset/cutoff persistence and 100-fight rolling bound")
+''')
+lua.execute('''
+R.db.lx=123; R.db.ly=456
+now=30000; fighting=false
+R.ShowPrompt(R.history[1])
+assert(R.promptFight==R.history[1])
+local seen={}
+for _,fact in ipairs(R.promptFacts) do assert(fact.shown and not seen[fact.text]); seen[fact.text]=true end
+now=30000.125; R.UpdatePrompt(); assert(R.launcher.alpha==.5 and R.promptPhase=="homeOut")
+now=30000.25; R.UpdatePrompt(); assert(R.launcher.alpha==0 and R.promptPhase=="promptIn")
+now=30000.375; R.UpdatePrompt(); assert(R.launcher.alpha==.5)
+now=30000.5; R.UpdatePrompt(); assert(R.launcher.alpha==1 and R.promptPhase=="hold")
+now=30012.4; R.UpdatePrompt(); assert(R.promptFight)
+now=30012.5; R.UpdatePrompt(); assert(R.promptPhase=="promptOut")
+now=30012.75; R.UpdatePrompt(); assert(R.launcher.alpha==0 and R.promptPhase=="homeIn")
+now=30013; R.UpdatePrompt()
+assert(not R.promptFight and not R.launcher.scripts.OnUpdate)
+assert(R.db.lx==123 and R.db.ly==456)
+R.ShowPrompt(R.history[1]); R.view=-1; R.window:Show()
+now=now+.25; R.UpdatePrompt(); now=now+.25; R.UpdatePrompt()
+R.launcher.scripts.OnClick()
+assert(R.view==1 and R.window:IsShown() and not R.promptFight)
+assert(R.promptPhase=="promptOut")
+now=now+.25; R.UpdatePrompt(); now=now+.25; R.UpdatePrompt()
+assert(not R.promptPhase and R.launcher.alpha==1)
+R.db.hideLauncher=true; R.ShowPrompt(R.history[1]); assert(R.launcher:IsShown())
+R.EndPrompt(); assert(not R.launcher:IsShown())
+R.db.hideLauncher=false; R.ShowPrompt(R.history[1]); R.Start(now)
+assert(not R.promptFight)
+R.Record({kind="damage",source="player",target="Wolf",amount=1}); R.Finish(now+1,true)
+assert(not R.promptFight)
+print("PASS: fade-out/move/fade-in transitions, twelve-second hold, click return fade, saved position unchanged, hidden launcher restoration, combat restart and silent logout")
+assert(R.db.quickReport==true)
+R.ShowPrompt(R.history[1]); assert(R.promptPhase)
+this=R.window.quickReport; this:SetChecked(false); this.scripts.OnClick()
+assert(R.db.quickReport==false and not R.promptPhase and not R.launcher.scripts.OnUpdate)
+R.Init(); assert(R.db.quickReport==false)
+local count=table.getn(R.history)
+R.Start(now); R.Record({kind="damage",source="player",target="Wolf",amount=42}); R.Finish(now+1)
+assert(not R.promptPhase and R.history[1].damage==42)
+this:SetChecked(true); this.scripts.OnClick(); R.ShowPrompt(R.history[1])
+assert(R.promptPhase and R.db.quickReport)
+R.EndPrompt()
+print("PASS: quick-report checkbox default, immediate dismissal, persisted off state, continued recording and re-enable")
 ''')

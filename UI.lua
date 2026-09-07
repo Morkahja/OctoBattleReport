@@ -68,6 +68,22 @@ function R.CreateUI()
   text(w,19,22,-20,"OCTO  /  BATTLE REPORT",gold)
   w.subtitle=text(w,11,23,-48,"Your fight, at a glance.",{.55,.61,.69})
   button(w,"X",674,-16,26,function() w:Hide() end)
+  local quick=CreateFrame("CheckButton","OctoBattleReportQuickReport",w,"UICheckButtonTemplate")
+  quick:SetPoint("TOPLEFT",w,"TOPLEFT",535,-18); quick:SetWidth(22); quick:SetHeight(22)
+  text(quick,11,27,-6,"Quick report",{.75,.80,.87})
+  quick:SetChecked(R.db.quickReport)
+  quick:SetScript("OnClick",function()
+    R.db.quickReport=this:GetChecked() and true or false
+    if not R.db.quickReport then R.EndPrompt() end
+  end)
+  quick:SetScript("OnEnter",function()
+    GameTooltip:SetOwner(this,"ANCHOR_RIGHT")
+    GameTooltip:AddLine("Post-fight quick report",1,.78,.38)
+    GameTooltip:AddLine("Show the temporary button and three fight facts after combat. Saved per character. Recording continues when disabled.",.75,.80,.86,1)
+    GameTooltip:Show()
+  end)
+  quick:SetScript("OnLeave",function() GameTooltip:Hide() end)
+  w.quickReport=quick
   button(w,"Live / Latest",22,-72,104,function() R.view=0; R.offset=0; R.Refresh() end)
   w.previous=button(w,"<",134,-72,28,function() R.Browse(-1); R.Refresh() end)
   w.next=button(w,">",170,-72,28,function() R.Browse(1); R.Refresh() end)
@@ -145,16 +161,116 @@ function R.CreateUI()
   w:SetScript("OnMouseWheel",function() R.offset=math.max(0,math.min(math.max(0,(R.rowCount or 0)-7),R.offset-arg1)); R.Refresh() end)
   w.sort=button(w,"Sort: total",577,-385,120,function() R.sortCount=not R.sortCount; R.offset=0; R.Refresh() end)
   -- A small movable launcher keeps the report one click away.
-  local launch=button(UIParent,"Battle Report",0,0,112,function() if w:IsShown() then w:Hide() else w:Show(); R.Refresh() end end)
+  local launch=button(UIParent,"Battle Report",0,0,112,function()
+    if R.promptFight then
+      local fight=R.promptFight
+      R.ReturnPrompt(); R.view=1; R.offset=0
+      for i,f in ipairs(R.history) do if f==fight then R.view=i; break end end
+      w:Show(); R.Refresh()
+    elseif w:IsShown() then w:Hide() else w:Show(); R.Refresh() end
+  end)
   launch:ClearAllPoints()
   if R.db.lx and R.db.ly then launch:SetPoint("TOPLEFT",UIParent,"BOTTOMLEFT",R.db.lx,R.db.ly)
   else launch:SetPoint("TOP",UIParent,"TOP",0,-90) end
   launch:SetMovable(true); launch:SetClampedToScreen(true); launch:RegisterForDrag("LeftButton")
-  launch:SetScript("OnDragStart",function() this:StartMoving() end)
-  launch:SetScript("OnDragStop",function() this:StopMovingOrSizing(); R.db.lx=this:GetLeft(); R.db.ly=this:GetTop() end)
+  launch:SetScript("OnDragStart",function() if not R.promptPhase then R.launchDragging=true; this:StartMoving() end end)
+  launch:SetScript("OnDragStop",function() if R.launchDragging then this:StopMovingOrSizing(); R.db.lx=this:GetLeft(); R.db.ly=this:GetTop(); R.launchDragging=nil end end)
   R.launcher=launch
+  local factsBackground=panel(launch,0,0,180,70)
+  factsBackground:ClearAllPoints(); factsBackground:SetPoint("TOP",launch,"BOTTOM",0,-5)
+  factsBackground:SetBackdropColor(.025,.035,.05,.72)
+  factsBackground:SetBackdropBorderColor(.30,.33,.38,.45)
+  factsBackground:EnableMouse(false); factsBackground:Hide()
+  R.promptBackground=factsBackground
+  R.promptFacts={}
+  for i=1,3 do
+    local fact=text(factsBackground,11,0,0,"",{.88,.89,.93})
+    fact:ClearAllPoints(); fact:SetPoint("TOP",factsBackground,"TOP",0,-8-(i-1)*18)
+    fact:SetWidth(164); fact:SetHeight(16); fact:SetJustifyH("CENTER"); fact:Hide()
+    R.promptFacts[i]=fact
+  end
   if R.db.hideLauncher then launch:Hide() end
   w:Hide()
+end
+function R.EndPrompt()
+  if not R.promptPhase then return end
+  R.promptFight=nil; R.promptPhase=nil
+  local b=R.launcher
+  b:SetScript("OnUpdate",nil)
+  b:SetAlpha(1); b:EnableMouse(true)
+  b:SetBackdropColor(.11,.13,.17,1); b:SetBackdropBorderColor(.25,.28,.32,1)
+  b:ClearAllPoints()
+  if R.db.lx and R.db.ly then b:SetPoint("TOPLEFT",UIParent,"BOTTOMLEFT",R.db.lx,R.db.ly)
+  else b:SetPoint("TOP",UIParent,"TOP",0,-90) end
+  for _,fact in ipairs(R.promptFacts) do fact:Hide() end
+  R.promptBackground:Hide()
+  if R.db.hideLauncher then b:Hide() end
+end
+function R.ReturnPrompt()
+  if not R.promptFight then return end
+  R.promptFight=nil; R.promptPhase="promptOut"; R.promptStarted=GetTime()
+  R.launcher:EnableMouse(false)
+end
+function R.UpdatePrompt()
+  local b=R.launcher
+  local age=GetTime()-R.promptStarted
+  local progress=math.min(1,age/.25)
+  local phase=R.promptPhase
+  if phase=="homeOut" or phase=="promptOut" then
+    b:SetAlpha(1-progress)
+    if progress>=1 then
+      b:ClearAllPoints()
+      if phase=="homeOut" then
+        b:SetPoint("CENTER",UIParent,"TOP",0,-UIParent:GetHeight()/5)
+        R.promptBackground:Show(); R.promptPhase="promptIn"
+      else
+        if R.db.lx and R.db.ly then b:SetPoint("TOPLEFT",UIParent,"BOTTOMLEFT",R.db.lx,R.db.ly)
+        else b:SetPoint("TOP",UIParent,"TOP",0,-90) end
+        R.promptBackground:Hide()
+        b:SetBackdropColor(.11,.13,.17,1); b:SetBackdropBorderColor(.25,.28,.32,1)
+        if R.db.hideLauncher then R.EndPrompt(); return end
+        R.promptPhase="homeIn"
+      end
+      R.promptStarted=GetTime()
+    end
+  elseif phase=="promptIn" or phase=="homeIn" then
+    b:SetAlpha(progress)
+    if progress>=1 then
+      if phase=="homeIn" then R.EndPrompt(); return end
+      R.promptPhase="hold"; R.promptStarted=GetTime(); b:EnableMouse(true)
+    end
+  elseif phase=="hold" then
+    if age>=12 then R.ReturnPrompt(); return end
+    local glow=(1+math.sin(age*4))/2
+    b:SetBackdropColor(.11+.04*glow,.13+.025*glow,.17,1)
+    b:SetBackdropBorderColor(.55+.20*glow,.43+.15*glow,.22,1)
+  end
+end
+function R.ShowPrompt(f)
+  if not R.db.quickReport or not R.launcher or R.launchDragging then return end
+  R.EndPrompt()
+  local candidates={"Fight duration: "..R.Number(f.duration).." sec","Damage dealt: "..R.Number(f.damage),"Damage taken: "..R.Number(f.taken)}
+  local function add(label,n) if n and n>0 then table.insert(candidates,label..R.Number(n)) end end
+  add("DPS: ",f.damage/math.max(.1,f.duration)); add("Critical hits: ",f.crits)
+  add("Dodges: ",f.Dodge); add("Parries: ",f.Parry); add("Blocks: ",f.Block)
+  add("Healing done: ",f.healing); add("Healing received: ",f.received)
+  for _,name in ipairs({"Mana","Rage","Energy"}) do
+    local a=f.resources and f.resources[name]
+    if a then add(name.." used: ",a.spent); add(name.." recovered: ",a.gained) end
+  end
+  for i=1,3 do
+    local index=math.random(table.getn(candidates))
+    R.promptFacts[i]:SetText(table.remove(candidates,index)); R.promptFacts[i]:Show()
+  end
+  R.promptFight=f; R.promptStarted=GetTime()
+  local b=R.launcher
+  R.promptPhase="homeOut"
+  b:SetAlpha(1); b:EnableMouse(false)
+  if R.db.hideLauncher then
+    b:ClearAllPoints(); b:SetPoint("CENTER",UIParent,"TOP",0,-UIParent:GetHeight()/5)
+    b:SetAlpha(0); R.promptBackground:Show(); R.promptPhase="promptIn"
+  end
+  b:Show(); b:SetScript("OnUpdate",R.UpdatePrompt)
 end
 function R.Refresh()
   local w,f=R.window,R.GetFight()
@@ -294,9 +410,11 @@ SlashCmdList["OCTOBATTLEREPORT"]=function(msg)
   elseif msg=="source" then
     DEFAULT_CHAT_FRAME:AddMessage("Use /obr source Effect name = Item or enchantment name. Labels describe the source; they do not prove proc counts.")
   elseif msg=="button" then
+    R.EndPrompt()
     R.db.hideLauncher=not R.db.hideLauncher
     if R.db.hideLauncher then R.launcher:Hide() else R.launcher:Show() end
   elseif msg=="position" then
+    R.EndPrompt()
     R.window:ClearAllPoints(); R.window:SetPoint("CENTER",UIParent,"CENTER",0,0)
     R.launcher:ClearAllPoints(); R.launcher:SetPoint("TOP",UIParent,"TOP",0,-90)
     R.db.x=nil; R.db.y=nil; R.db.lx=nil; R.db.ly=nil
