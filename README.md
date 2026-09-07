@@ -2,7 +2,6 @@
 
 **Get to know your fights.** A lightweight personal combat report for World of Warcraft 1.12, including Turtle WoW. Watch your numbers live, review your last encounter, or see your average performance across up to 100 fights.
 
-It works on its own—**ShaguDPS is not required.**
 
 **[Download the latest addon ZIP](https://github.com/Morkahja/OctoBattleReport/releases/latest/download/OctoBattleReport.zip)** · [All releases](https://github.com/Morkahja/OctoBattleReport/releases)
 
