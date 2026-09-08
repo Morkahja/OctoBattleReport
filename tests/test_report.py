@@ -28,7 +28,12 @@ function methods:SetChecked(v) self.checked=v end
 function methods:GetChecked() return self.checked end
 function methods:SetText(v) self.text=v end
 function methods:Show() self.shown=true end
-function methods:Hide() self.shown=false end
+function methods:Hide()
+  local wasShown=self.shown; self.shown=false
+  if wasShown and self.scripts.OnHide then
+    local previousThis=this; this=self; self.scripts.OnHide(); this=previousThis
+  end
+end
 function methods:IsShown() return self.shown end
 function methods:GetLeft() return 10 end
 function methods:GetTop() return 600 end
@@ -41,8 +46,32 @@ function CreateFrame(kind,name,parent)
   local f=setmetatable({scripts={},events={},shown=true},{__index=methods})
   table.insert(frames,f); return f
 end
+function methods:EnableMouse(value) self.mouseEnabled=value end
+function methods:SetPoint(a,b,c,d,e) self.point={a,b,c,d,e} end
 UIParent=CreateFrame("Frame"); GameTooltip=CreateFrame("Frame")
 ''')
+# Optional local integration: load the real companion before Battle Report,
+# matching its usual alphabetical addon load order. No dependency in releases.
+melee_path = ROOT.parent / 'MeleeStartAttack' / 'MeleeStartAttack.lua'
+if melee_path.is_file():
+    lua.execute('''
+BOOKTYPE_SPELL="spell"; attackState=false; actionCalls=0
+function UnitClass() return "Shaman","SHAMAN" end
+function UnitExists() return true end
+function UnitIsDead() return false end
+function UnitCanAttack() return true end
+function IsAttackAction(slot) return slot==120 end
+function IsCurrentAction() return attackState end
+function GetActionTexture() return "Interface\\\\Icons\\\\Spell_Frost_FrostShock" end
+function GetSpellTexture() return GetActionTexture() end
+function GetSpellName(slot) if slot==1 then return "Frost Shock" end end
+function AttackTarget() attackState=not attackState end
+function UseAction() actionCalls=actionCalls+1; return 77 end
+function CastSpell() return 78 end
+function CastSpellByName() return 79 end
+''')
+    lua.execute(melee_path.read_text(encoding='utf-8-sig'))
+    lua.execute('meleeUseAction=UseAction; meleeCastSpell=CastSpell; meleeCastByName=CastSpellByName')
 lua.execute((ROOT / 'tests' / 'GlobalStrings.lua').read_text(encoding='utf-8-sig'))
 for filename in ['Core.lua', 'Average.lua', 'Resources.lua', 'Parser.lua', 'UI.lua']:
     lua.execute((ROOT / filename).read_text())
@@ -334,4 +363,51 @@ this:SetChecked(true); this.scripts.OnClick(); R.ShowPrompt(R.history[1])
 assert(R.promptPhase and R.db.quickReport)
 R.EndPrompt()
 print("PASS: quick-report checkbox default, immediate dismissal, persisted off state, continued recording and re-enable")
+local label,color,hex=R.Compare(120,100,true); assert(label=="+20 vs avg" and hex=="59d985")
+label,color,hex=R.Compare(80,100,false); assert(label=="-20 vs avg" and hex=="59d985")
+label,color,hex=R.Compare(120,100,false); assert(hex=="ff665c")
+label,color,hex=R.Compare(80,100,true); assert(hex=="ff665c")
+label,color,hex=R.Compare(20,0,true); assert(label=="+20 vs avg")
+label,color,hex=R.Compare(100,100,true); assert(label=="= average")
+label,color,hex=R.Compare(100,50,nil); assert(hex=="adb8c7")
+label=R.Compare(100,nil,true); assert(label=="No baseline")
+R.EndPrompt(); R.history={}; R.db.history=R.history; R.average=nil; R.db.averageAfter=0
+now=40000; R.Start(now); assert(not R.current.baseline)
+R.Record({kind="damage",source="player",target="Wolf",amount=100}); R.Finish(now+10,true)
+now=40020; R.Start(now); local compared=R.current
+assert(compared.baseline.damage==100 and compared.baseline.fights==1)
+R.Record({kind="damage",source="player",target="Wolf",amount=300}); R.Finish(now+10,true)
+R.view=1; R.Refresh(); assert(R.window.cards[1].delta.text=="+200 vs avg")
+R.ResetAverage(); assert(compared.baseline.damage==100)
+now=40040; R.Start(now); assert(not R.current.baseline)
+assert(compared.baseline.damage==100)
+print("PASS: comparison direction, neutral/zero/missing baselines, excluding the current fight, stable snapshots and reset periods")
+R.current=nil; fighting=false; R.db.quickReport=true; R.db.hideLauncher=false
+R.ShowPrompt(R.history[1]); R.launcher:Hide()
+assert(not R.promptPhase and not R.launcher.scripts.OnUpdate and R.launcher.alpha==1 and R.launcher.mouseEnabled)
+R.ShowPrompt(R.history[1]); fighting=true; R.UpdatePrompt()
+assert(not R.promptPhase and R.launcher.mouseEnabled)
+fighting=false; R.ShowPrompt(R.history[1]); R.promptPhase="invalid"; R.UpdatePrompt()
+assert(not R.promptPhase and not R.launcher.scripts.OnUpdate)
+local oldAverage=R.GetAverage
+R.GetAverage=function() error("Combat baseline must not rebuild detail rows") end
+R.CaptureBaseline(); R.GetAverage=oldAverage
+if meleeUseAction then
+  assert(UseAction==meleeUseAction and CastSpell==meleeCastSpell and CastSpellByName==meleeCastByName)
+  local function attackCheck()
+    attackState=false; assert(UseAction(1)==77 and attackState)
+    assert(UseAction(1)==77 and attackState) -- does not toggle off
+  end
+  R.ShowPrompt(R.history[1])
+  attackCheck(); assert(not R.launcher.mouseEnabled)
+  now=now+.25; R.UpdatePrompt(); attackCheck()
+  now=now+.25; R.UpdatePrompt(); attackCheck(); assert(R.launcher.mouseEnabled)
+  R.ReturnPrompt(); attackCheck(); assert(not R.launcher.mouseEnabled)
+  now=now+.25; R.UpdatePrompt(); attackCheck()
+  now=now+.25; R.UpdatePrompt(); attackCheck()
+  assert(R.launcher.alpha==1 and R.launcher.mouseEnabled and not R.promptPhase)
+  assert(R.launcher.point[1]=="TOPLEFT" and R.launcher.point[4]==R.db.lx and R.launcher.point[5]==R.db.ly)
+  print("PASS: real Melee Start Attack hooks preserved and attacks work in every fade phase")
+end
+print("PASS: hidden/interrupted/combat prompt cleanup and scalar-only combat baseline")
 ''')

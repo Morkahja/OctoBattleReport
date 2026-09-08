@@ -65,6 +65,12 @@ Drag the window by its header to move it. The small launcher button is movable t
 
 ## Look beyond a single fight
 
+Completed reports compare **Damage Dealt**, **Damage Taken**, and **Healing Done** with your average from before that fight. A small signed amount, such as `+120 vs avg`, shows the difference. More damage/healing dealt is green; less damage taken is green. The reverse is red, and equal values are neutral. Hover a card to see how many earlier fights formed the baseline.
+
+Quick-report facts include the same signed comparison below their values. Higher DPS, critical hits, avoidance and resource recovery are green; lower values are red. Duration, resources spent and healing received use neutral differences because their direction alone does not establish better performance. Comparisons are observations across different encounters, not a rating of how well you played.
+
+The baseline uses up to 100 completed fights in the current average period, excludes the fight being evaluated, and stays attached to that report. Resetting the average starts a fresh baseline for future fights. The first fight of a new period and older reports without a stored baseline show **No baseline**. Live and Average views do not color the three cards against themselves.
+
 Average helps you compare your usual damage, incoming attacks, resource use and recovery over several encounters. Counts such as `0.8 dodges` mean an average per fight. Rates use the total amount divided by total combat time; Overview also includes the mean of individual fight DPS.
 
 ![Average view showing defense and resource statistics across 45 completed fights](screenshots/average-defense.png)

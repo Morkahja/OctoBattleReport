@@ -2,6 +2,34 @@ local R=OctoBattleReport
 local scalars={"damage","taken","healing","received","attacks","hits","ticks","crits","incoming","incomingHits","blocked","absorbed","resisted","Dodge","Parry","Block","Miss","Resist","Absorb","Immune","Evade"}
 local groups={"abilities","defense","heals","effects","casts","recovery"}
 local values={"count","amount","hits","ticks","crits","casts","misses"}
+function R.CaptureBaseline()
+  -- Combat entry needs only scalar totals, not every ability/source row.
+  local keys={"damage","taken","healing","duration","crits","Dodge","Parry","Block","received"}
+  local b={fights=0}; local resourceCount=0
+  for _,f in ipairs(R.history) do
+    if (f.id or 0)>(R.db.averageAfter or 0) and not f.excludeAverage then
+      b.fights=b.fights+1
+      for _,key in ipairs(keys) do b[key]=(b[key] or 0)+(f[key] or 0) end
+      if f.resources then
+        resourceCount=resourceCount+1
+        for _,name in ipairs({"Mana","Rage","Energy"}) do
+          local r=f.resources[name]
+          b[name.."Spent"]=(b[name.."Spent"] or 0)+(r and r.spent or 0)
+          b[name.."Gained"]=(b[name.."Gained"] or 0)+(r and r.gained or 0)
+        end
+      end
+    end
+  end
+  if b.fights==0 then return nil end
+  b.dps=b.damage/math.max(.1,b.duration)
+  for _,key in ipairs(keys) do b[key]=b[key]/b.fights end
+  if resourceCount>0 then
+    for _,name in ipairs({"Mana","Rage","Energy"}) do
+      b[name.."Spent"]=b[name.."Spent"]/resourceCount; b[name.."Gained"]=b[name.."Gained"]/resourceCount
+    end
+  end
+  return b
+end
 function R.ResetAverage()
   R.db.averageAfter=R.db.serial
   if R.current then R.current.excludeAverage=true end

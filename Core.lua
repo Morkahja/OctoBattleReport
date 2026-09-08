@@ -30,6 +30,7 @@ function R.Start(now)
   if R.EndPrompt then R.EndPrompt() end
   if R.current then R.ending=nil; return end
   R.current=R.New(now)
+  if R.CaptureBaseline then R.current.baseline=R.CaptureBaseline() end
   if R.view~=-1 then R.view=0; R.offset=0 end
   local pending=R.pending
   R.pending={}

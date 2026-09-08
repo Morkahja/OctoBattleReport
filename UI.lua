@@ -35,6 +35,15 @@ function R.Number(n)
   if n~=math.floor(n) then return string.format("%.1f",n) end
   return tostring(math.floor(n+.5))
 end
+function R.Compare(value,baseline,higherBetter)
+  if baseline==nil then return "No baseline",{.58,.63,.69},"a0a8b0" end
+  local delta=value-baseline
+  if math.abs(delta)<.05 then return "= average",{.68,.72,.78},"adb8c7" end
+  local label=(delta>0 and "+" or "-")..R.Number(math.abs(delta)).." vs avg"
+  if higherBetter==nil then return label,{.68,.72,.78},"adb8c7" end
+  if (delta>0)==higherBetter then return label,{.35,.85,.52},"59d985" end
+  return label,{1,.40,.36},"ff665c"
+end
 local function tooltip(a)
   GameTooltip:SetOwner(this,"ANCHOR_RIGHT")
   GameTooltip:AddLine(a.name,1,.78,.38)
@@ -95,8 +104,21 @@ function R.CreateUI()
     local c=panel(w,22+(i-1)*229,-110,218,84)
     text(c,9,12,-11,label,{.57,.63,.71})
     c.value=text(c,24,12,-29,"0",i==1 and colors.Damage or (i==2 and colors.Defense or colors.Healing))
+    c.value:SetWidth(98); c.value:SetHeight(28)
+    c.delta=text(c,9,112,-29,""); c.delta:SetWidth(100); c.delta:SetHeight(13)
     c.sub=text(c,10,112,-46,"0 / sec",{.65,.70,.76})
     c.footer=text(c,9,12,-65,"",{.72,.76,.82}); c.footer:SetWidth(196); c.footer:SetHeight(12)
+    c:EnableMouse(true)
+    c:SetScript("OnEnter",function()
+      local f=R.GetFight()
+      GameTooltip:SetOwner(this,"ANCHOR_RIGHT")
+      GameTooltip:AddLine("Compared with your earlier fights",1,.78,.38)
+      if f and f.baseline then GameTooltip:AddLine("Baseline: "..f.baseline.fights.." completed fights before this encounter.",.75,.80,.86,1)
+      else GameTooltip:AddLine("Comparison appears on completed fights with an earlier recorded baseline.",.75,.80,.86,1) end
+      GameTooltip:AddLine("Green: more damage/healing dealt or less damage taken. Red: the reverse. Differences are per-fight amounts, not percentages or an overall performance rating.",.75,.80,.86,1)
+      GameTooltip:Show()
+    end)
+    c:SetScript("OnLeave",function() GameTooltip:Hide() end)
     w.cards[i]=c
   end
   for i,label in ipairs({"RESOURCES USED","RESOURCES RECOVERED"}) do
@@ -176,7 +198,8 @@ function R.CreateUI()
   launch:SetScript("OnDragStart",function() if not R.promptPhase then R.launchDragging=true; this:StartMoving() end end)
   launch:SetScript("OnDragStop",function() if R.launchDragging then this:StopMovingOrSizing(); R.db.lx=this:GetLeft(); R.db.ly=this:GetTop(); R.launchDragging=nil end end)
   R.launcher=launch
-  local factsBackground=panel(launch,0,0,180,70)
+  launch:SetScript("OnHide",function() if R.promptPhase then R.EndPrompt() end end)
+  local factsBackground=panel(launch,0,0,180,108)
   factsBackground:ClearAllPoints(); factsBackground:SetPoint("TOP",launch,"BOTTOM",0,-5)
   factsBackground:SetBackdropColor(.025,.035,.05,.72)
   factsBackground:SetBackdropBorderColor(.30,.33,.38,.45)
@@ -185,8 +208,8 @@ function R.CreateUI()
   R.promptFacts={}
   for i=1,3 do
     local fact=text(factsBackground,11,0,0,"",{.88,.89,.93})
-    fact:ClearAllPoints(); fact:SetPoint("TOP",factsBackground,"TOP",0,-8-(i-1)*18)
-    fact:SetWidth(164); fact:SetHeight(16); fact:SetJustifyH("CENTER"); fact:Hide()
+    fact:ClearAllPoints(); fact:SetPoint("TOP",factsBackground,"TOP",0,-7-(i-1)*33)
+    fact:SetWidth(164); fact:SetHeight(30); fact:SetJustifyH("CENTER"); fact:Hide()
     R.promptFacts[i]=fact
   end
   if R.db.hideLauncher then launch:Hide() end
@@ -194,7 +217,7 @@ function R.CreateUI()
 end
 function R.EndPrompt()
   if not R.promptPhase then return end
-  R.promptFight=nil; R.promptPhase=nil
+  R.promptFight=nil; R.promptPhase=nil; R.promptStarted=nil
   local b=R.launcher
   b:SetScript("OnUpdate",nil)
   b:SetAlpha(1); b:EnableMouse(true)
@@ -213,6 +236,8 @@ function R.ReturnPrompt()
 end
 function R.UpdatePrompt()
   local b=R.launcher
+  if not R.promptPhase then b:SetScript("OnUpdate",nil); b:SetAlpha(1); b:EnableMouse(true); return end
+  if not R.db.quickReport or UnitAffectingCombat("player") then R.EndPrompt(); return end
   local age=GetTime()-R.promptStarted
   local progress=math.min(1,age/.25)
   local phase=R.promptPhase
@@ -244,19 +269,29 @@ function R.UpdatePrompt()
     local glow=(1+math.sin(age*4))/2
     b:SetBackdropColor(.11+.04*glow,.13+.025*glow,.17,1)
     b:SetBackdropBorderColor(.55+.20*glow,.43+.15*glow,.22,1)
+  else
+    R.EndPrompt()
   end
 end
 function R.ShowPrompt(f)
   if not R.db.quickReport or not R.launcher or R.launchDragging then return end
   R.EndPrompt()
-  local candidates={"Fight duration: "..R.Number(f.duration).." sec","Damage dealt: "..R.Number(f.damage),"Damage taken: "..R.Number(f.taken)}
-  local function add(label,n) if n and n>0 then table.insert(candidates,label..R.Number(n)) end end
-  add("DPS: ",f.damage/math.max(.1,f.duration)); add("Critical hits: ",f.crits)
-  add("Dodges: ",f.Dodge); add("Parries: ",f.Parry); add("Blocks: ",f.Block)
-  add("Healing done: ",f.healing); add("Healing received: ",f.received)
+  local candidates={}
+  local function add(label,n,key,higherBetter,includeZero)
+    if n and (n>0 or includeZero) then
+      local delta,color,hex=R.Compare(n,f.baseline and f.baseline[key],higherBetter)
+      table.insert(candidates,label.."|cff"..hex..R.Number(n).."|r\n|cff"..hex..delta.."|r")
+    end
+  end
+  add("Duration (s): ",f.duration,"duration",nil,true)
+  add("Damage dealt: ",f.damage,"damage",true,true)
+  add("Damage taken: ",f.taken,"taken",false,true)
+  add("DPS: ",f.damage/math.max(.1,f.duration),"dps",true); add("Critical hits: ",f.crits,"crits",true)
+  add("Dodges: ",f.Dodge,"Dodge",true); add("Parries: ",f.Parry,"Parry",true); add("Blocks: ",f.Block,"Block",true)
+  add("Healing done: ",f.healing,"healing",true); add("Healing received: ",f.received,"received",nil)
   for _,name in ipairs({"Mana","Rage","Energy"}) do
     local a=f.resources and f.resources[name]
-    if a then add(name.." used: ",a.spent); add(name.." recovered: ",a.gained) end
+    if a then add(name.." used: ",a.spent,name.."Spent",nil); add(name.." recovered: ",a.gained,name.."Gained",true) end
   end
   for i=1,3 do
     local index=math.random(table.getn(candidates))
@@ -287,6 +322,14 @@ function R.Refresh()
   local values={f and f.damage or 0,f and f.taken or 0,f and f.healing or 0}
   for i,c in ipairs(w.cards) do
     c.value:SetText(R.Number(values[i])); c.sub:SetText(R.Number(seconds>0 and values[i]/seconds or 0).." / sec")
+    local baseColor=i==1 and colors.Damage or (i==2 and colors.Defense or colors.Healing)
+    c.value:SetTextColor(unpack(baseColor)); c.delta:SetText("")
+    if f and not f.isAverage and f~=R.current then
+      local key=({"damage","taken","healing"})[i]
+      local delta,color=R.Compare(values[i],f.baseline and f.baseline[key],i~=2)
+      c.delta:SetText(delta); c.delta:SetTextColor(unpack(color))
+      if f.baseline then c.value:SetTextColor(unpack(color)) end
+    end
   end
   w.cards[1].footer:SetText(string.format("%s hits   %s crits   %s ticks",R.Number(f and f.hits),R.Number(f and f.crits),R.Number(f and f.ticks)))
   w.cards[2].footer:SetText(string.format("%s dodges   %s parries   %s blocks",R.Number(f and f.Dodge),R.Number(f and f.Parry),R.Number(f and f.Block)))

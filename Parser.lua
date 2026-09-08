@@ -143,7 +143,7 @@ frame:SetScript("OnEvent",function()
   elseif not R.db then return
   elseif event=="PLAYER_REGEN_DISABLED" then R.Start(GetTime())
   elseif event=="PLAYER_REGEN_ENABLED" then R.ending=GetTime()
-  elseif event=="PLAYER_LOGOUT" then R.Finish(GetTime(),true)
+  elseif event=="PLAYER_LOGOUT" then R.EndPrompt(); R.Finish(GetTime(),true)
   elseif event=="SPELL_CAST_EVENT" then
     if arg1==1 then requests[arg2]=GetTime() else requests[arg2]=nil end
     for id,t in pairs(requests) do if GetTime()-t>60 then requests[id]=nil end end
