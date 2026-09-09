@@ -75,6 +75,8 @@ function R.BuildRules()
   for _,kind in ipairs({"DROWNING","FALLING","FATIGUE","FIRE","LAVA","SLIME"}) do
     add("VSENVIRONMENTALDAMAGE_"..kind.."_SELF","damage","Environment","player",kind,1)
   end
+  -- Named casters also match the broader self-gain template.
+  add("POWERGAINOTHERSELF","effect",3,"player",4,1)
   add("POWERGAINSELFSELF","effect","Unknown","player",3,1)
   add("SPELLEXTRAATTACKSSELF","effect","player","player",2,1)
   add("SPELLEXTRAATTACKSSELF_SINGULAR","effect","player","player",2,1)
@@ -104,10 +106,11 @@ function R.Parse(message)
       if s==player then s="player" end
       if t==player then t="player" end
       if s~="player" and t~="player" then return end
+      local resourceGain=r.key=="POWERGAINSELFSELF" or r.key=="POWERGAINOTHERSELF"
       return {kind=r.kind,source=s,target=t,spell=resolve(r.spell,c),amount=tonumber(resolve(r.value,c)) or 0,
-        gainResource=r.key=="POWERGAINSELFSELF" and c[2] or nil,
+        gainResource=resourceGain and c[2] or nil,
         tick=r.tick,crit=r.crit,outcome=r.outcome,blocked=extra.blocked,absorbed=extra.absorbed,resisted=extra.resisted,
-        detail=r.kind=="effect" and r.value and (r.source=="Unknown" and "Resource gains; total = resource restored" or "Extra-attack grants; amount = attacks granted") or nil}
+        detail=r.kind=="effect" and r.value and (resourceGain and "Resource gains; total = resource restored" or "Extra-attack grants; amount = attacks granted") or nil}
     end
   end
 end
@@ -145,7 +148,9 @@ frame:SetScript("OnEvent",function()
   elseif event=="PLAYER_REGEN_ENABLED" then R.ending=GetTime()
   elseif event=="PLAYER_LOGOUT" then R.EndPrompt(); R.Finish(GetTime(),true)
   elseif event=="SPELL_CAST_EVENT" then
-    if arg1==1 then requests[arg2]=GetTime() else requests[arg2]=nil end
+    -- A rejected retry is not cancellation of an earlier accepted request.
+    -- Keep that request until its server confirmation or timeout.
+    if arg1==1 then requests[arg2]=GetTime() end
     for id,t in pairs(requests) do if GetTime()-t>60 then requests[id]=nil end end
   elseif event=="SPELL_GO_SELF" then
     local name=GetSpellRecField(arg2,"name") or ("Spell "..tostring(arg2))

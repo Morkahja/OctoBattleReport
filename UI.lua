@@ -195,8 +195,18 @@ function R.CreateUI()
   if R.db.lx and R.db.ly then launch:SetPoint("TOPLEFT",UIParent,"BOTTOMLEFT",R.db.lx,R.db.ly)
   else launch:SetPoint("TOP",UIParent,"TOP",0,-90) end
   launch:SetMovable(true); launch:SetClampedToScreen(true); launch:RegisterForDrag("LeftButton")
-  launch:SetScript("OnDragStart",function() if not R.promptPhase then R.launchDragging=true; this:StartMoving() end end)
-  launch:SetScript("OnDragStop",function() if R.launchDragging then this:StopMovingOrSizing(); R.db.lx=this:GetLeft(); R.db.ly=this:GetTop(); R.launchDragging=nil end end)
+  launch:SetScript("OnDragStart",function()
+    if R.promptPhase=="hold" then R.promptDragging=true; this:StartMoving()
+    elseif not R.promptPhase then R.launchDragging=true; this:StartMoving() end
+  end)
+  launch:SetScript("OnDragStop",function()
+    if R.promptDragging then
+      this:StopMovingOrSizing(); R.db.qx=this:GetLeft(); R.db.qy=this:GetTop()
+      R.promptDragging=nil; R.promptStarted=GetTime()
+    elseif R.launchDragging then
+      this:StopMovingOrSizing(); R.db.lx=this:GetLeft(); R.db.ly=this:GetTop(); R.launchDragging=nil
+    end
+  end)
   R.launcher=launch
   launch:SetScript("OnHide",function() if R.promptPhase then R.EndPrompt() end end)
   local factsBackground=panel(launch,0,0,180,108)
@@ -217,6 +227,9 @@ function R.CreateUI()
 end
 function R.EndPrompt()
   if not R.promptPhase then return end
+  if R.promptDragging then
+    R.launcher:StopMovingOrSizing(); R.db.qx=R.launcher:GetLeft(); R.db.qy=R.launcher:GetTop(); R.promptDragging=nil
+  end
   R.promptFight=nil; R.promptPhase=nil; R.promptStarted=nil
   local b=R.launcher
   b:SetScript("OnUpdate",nil)
@@ -231,8 +244,14 @@ function R.EndPrompt()
 end
 function R.ReturnPrompt()
   if not R.promptFight then return end
+  if R.promptDragging then return end
   R.promptFight=nil; R.promptPhase="promptOut"; R.promptStarted=GetTime()
   R.launcher:EnableMouse(false)
+end
+local function placePrompt(b)
+  b:ClearAllPoints()
+  if R.db.qx and R.db.qy then b:SetPoint("TOPLEFT",UIParent,"BOTTOMLEFT",R.db.qx,R.db.qy)
+  else b:SetPoint("CENTER",UIParent,"TOP",0,-UIParent:GetHeight()/5) end
 end
 function R.UpdatePrompt()
   local b=R.launcher
@@ -246,7 +265,7 @@ function R.UpdatePrompt()
     if progress>=1 then
       b:ClearAllPoints()
       if phase=="homeOut" then
-        b:SetPoint("CENTER",UIParent,"TOP",0,-UIParent:GetHeight()/5)
+        placePrompt(b)
         R.promptBackground:Show(); R.promptPhase="promptIn"
       else
         if R.db.lx and R.db.ly then b:SetPoint("TOPLEFT",UIParent,"BOTTOMLEFT",R.db.lx,R.db.ly)
@@ -265,6 +284,7 @@ function R.UpdatePrompt()
       R.promptPhase="hold"; R.promptStarted=GetTime(); b:EnableMouse(true)
     end
   elseif phase=="hold" then
+    if R.promptDragging then return end
     if age>=12 then R.ReturnPrompt(); return end
     local glow=(1+math.sin(age*4))/2
     b:SetBackdropColor(.11+.04*glow,.13+.025*glow,.17,1)
@@ -302,7 +322,7 @@ function R.ShowPrompt(f)
   R.promptPhase="homeOut"
   b:SetAlpha(1); b:EnableMouse(false)
   if R.db.hideLauncher then
-    b:ClearAllPoints(); b:SetPoint("CENTER",UIParent,"TOP",0,-UIParent:GetHeight()/5)
+    placePrompt(b)
     b:SetAlpha(0); R.promptBackground:Show(); R.promptPhase="promptIn"
   end
   b:Show(); b:SetScript("OnUpdate",R.UpdatePrompt)

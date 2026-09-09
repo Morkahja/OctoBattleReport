@@ -411,3 +411,54 @@ if meleeUseAction then
 end
 print("PASS: hidden/interrupted/combat prompt cleanup and scalar-only combat baseline")
 ''')
+lua.execute('''
+R.EndPrompt(); R.current=nil; R.pending={}; fighting=true; now=50000
+R.Start(now)
+GetSpellRecField=function(id) return "Retry spell "..id end
+emit("SPELL_CAST_EVENT",1,991,1)
+now=now+1; emit("SPELL_CAST_EVENT",0,991,1)
+emit("SPELL_GO_SELF",0,991,"playerguid","targetguid",0,1,0)
+assert(R.current.casts["Retry spell 991"] and R.current.casts["Retry spell 991"].count==1,
+  "Rejected retry erased an accepted cast")
+emit("SPELL_GO_SELF",0,991,"playerguid","targetguid",0,1,0)
+assert(R.current.casts["Retry spell 991"].count==1)
+emit("SPELL_CAST_EVENT",0,992,1)
+emit("SPELL_GO_SELF",0,992,"playerguid","targetguid",0,1,0)
+assert(not R.current.casts["Retry spell 992"])
+emit("SPELL_CAST_EVENT",1,993,1)
+now=now+61; emit("SPELL_CAST_EVENT",0,993,1)
+emit("SPELL_GO_SELF",0,993,"playerguid","targetguid",0,1,0)
+assert(not R.current.casts["Retry spell 993"])
+local e=parse("You gain 100 Mana from Friend's Restore Mana.","effect","Restore Mana",100,"Friend","player")
+assert(e.gainResource=="Mana" and e.detail=="Resource gains; total = resource restored")
+R.db.sources["Restore Mana"]="Custom source label"
+R.Record(e)
+emit("CHAT_MSG_SPELL_PERIODIC_SELF_BUFFS","You gain 50 Mana from Other's Restore Mana.")
+emit("CHAT_MSG_SPELL_PERIODIC_SELF_BUFFS","You gain 25 Mana from Restore Mana.")
+assert(R.current.effects["Restore Mana"].count==3 and R.current.effects["Restore Mana"].amount==175)
+assert(R.current.effects["Restore Mana"].source=="Custom source label")
+assert(R.current.recovery["Resource log: Restore Mana (Mana)"].amount==175)
+assert(not R.current.effects["Friend's Restore Mana"])
+print("PASS: rejected retries preserve accepted casts; confirmations remain one-shot and expire; named resource gains merge by spell and retain resource metadata/source labels")
+''')
+
+lua.execute('''
+fighting=false; R.EndPrompt(); R.db.quickReport=true; R.db.hideLauncher=false
+local homeX,homeY=R.db.lx,R.db.ly
+R.ShowPrompt(R.history[1]); now=now+.3; R.UpdatePrompt(); now=now+.3; R.UpdatePrompt()
+assert(R.promptPhase=="hold")
+this=R.launcher; this.scripts.OnDragStart(); assert(R.promptDragging)
+now=now+20; R.UpdatePrompt(); assert(R.promptPhase=="hold")
+this.scripts.OnDragStop()
+assert(not R.promptDragging and R.db.qx==10 and R.db.qy==600)
+assert(R.db.lx==homeX and R.db.ly==homeY)
+now=now+11; R.UpdatePrompt(); assert(R.promptPhase=="hold")
+R.EndPrompt(); R.ShowPrompt(R.history[1]); now=now+.3; R.UpdatePrompt()
+assert(R.launcher.point[1]=="TOPLEFT" and R.launcher.point[4]==10 and R.launcher.point[5]==600)
+now=now+.3; R.UpdatePrompt(); this=R.launcher; this.scripts.OnDragStart()
+fighting=true; R.UpdatePrompt(); assert(not R.promptDragging and not R.promptPhase)
+fighting=false; R.db.hideLauncher=true; R.ShowPrompt(R.history[1])
+assert(R.launcher.point[1]=="TOPLEFT" and R.launcher.point[4]==10)
+R.EndPrompt(); R.db.hideLauncher=false
+print("PASS: quick-report dragging saves separate coordinates, pauses expiry, reuses position and cleans up on combat")
+''')
