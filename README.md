@@ -100,3 +100,7 @@ Effect gains are not always separate procs, and hits or periodic ticks are not s
 | `/obr source` | Explain how to label an effect's source |
 
 For capture details, fight boundaries and testing notes, see the [detailed guide](GUIDE.md).
+
+### Combat-only recording
+
+Recording starts when you enter combat and stops immediately when you leave it. Falling damage, healing, casts and resource changes outside combat do not create or enter reports. Opening actions reported before combat begins are excluded.

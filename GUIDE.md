@@ -26,7 +26,7 @@ Below the summary cards, **Resources Used** on the left shows observed mana, rag
 
 Resource usage adds decreases in the player's active resource pool during combat; later gains do not subtract from the total. For example, spending 100 mana, recovering 50, and spending another 100 reports 200 used. Overview includes individual resource rows; their hover details show observed gains. Hover the resource summary for the measurement explanation.
 
-These are observed decreases, **not exact spell-cost accounting**: hostile drains also count, and spending combined with regeneration in one client update may be undercounted. Only the active pool is tracked, so hidden mana spending while in another form may be missed. Changes of power type, maximum capacity, and death/world-entry resets establish a new baseline instead of inventing a cost. Updates after the combat-end event are excluded, including subsequent rage decay. Mana decreases in the two seconds before combat are buffered to catch an opening spell; a nearby out-of-combat mana expense can therefore be included. Resource tracking is standalone and does not require Nampower.
+These are observed decreases, **not exact spell-cost accounting**: hostile drains also count, and spending combined with regeneration in one client update may be undercounted. Only the active pool is tracked, so hidden mana spending while in another form may be missed. Changes of power type, maximum capacity, and death/world-entry resets establish a new baseline instead of inventing a cost. Updates after the combat-end event are excluded, including subsequent rage decay. Out-of-combat spending is excluded, including opening spell costs reported before combat begins. Resource tracking is standalone and does not require Nampower.
 
 Fights saved before resource tracking was introduced show that data as unavailable; totals are captured for new fights after `/reload`.
 
@@ -72,14 +72,14 @@ Logged healing can include overhealing. Only explicitly logged blocked/absorbed/
 
 ## Fight boundaries and commands
 
-Combat begins on the player's combat-state event or the first personal damage/avoidance event. The report includes up to two seconds of buffered opening casts/effects/heals. Leaving combat closes the fight after a one-second grace period to catch trailing log events; immediately re-entering combat continues the same report. Personal damage outside the normal combat state closes after three seconds of inactivity. A death alone does not split a fight until combat ends. Reloading during combat saves a partial report and starts a new segment afterward.
+Recording begins on the player's combat-state event, or when an event arrives while the player is already flagged in combat. Leaving combat closes the report immediately. Out-of-combat damage (including falling), healing, casts and resource changes are excluded. Re-entering combat starts a separate report. A death alone does not split a fight until combat ends. Reloading during combat saves a partial report and starts a new segment afterward.
 
 - `/obr last`: last completed fight.
 - `/obr button`: hide/show the launcher.
 - `/obr position`: restore window and launcher positions.
 - `/obr source`: explain effect source labels.
 
-No full combat log, party meter, external libraries, network access, chat broadcasts or changes to ShaguDPS. Storage is limited to 100 aggregate reports plus the active report; the timeline and opening buffer are bounded. Average is cached and rebuilt only after a completed report or reset.
+No full combat log, party meter, external libraries, network access, chat broadcasts or changes to ShaguDPS. Storage is limited to 100 aggregate reports plus the active report; the timeline is bounded. Average is cached and rebuilt only after a completed report or reset.
 
 ## Validation
 

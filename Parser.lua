@@ -145,7 +145,8 @@ frame:SetScript("OnEvent",function()
     end
   elseif not R.db then return
   elseif event=="PLAYER_REGEN_DISABLED" then R.Start(GetTime())
-  elseif event=="PLAYER_REGEN_ENABLED" then R.ending=GetTime()
+  elseif event=="PLAYER_REGEN_ENABLED" then
+    pendingCast={}; requests={}; R.Finish(GetTime())
   elseif event=="PLAYER_LOGOUT" then R.EndPrompt(); R.Finish(GetTime(),true)
   elseif event=="SPELL_CAST_EVENT" then
     -- A rejected retry is not cancellation of an earlier accepted request.

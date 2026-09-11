@@ -2,7 +2,7 @@
 ## Title: Octo Battle Report
 ## Notes: Lightweight personal combat reports, live and after each fight.
 ## Author: Local
-## Version: 1.6.3
+## Version: 1.6.4
 ## SavedVariablesPerCharacter: OctoBattleReportDB
 
 Core.lua

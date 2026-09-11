@@ -123,7 +123,8 @@ parse("45 damage to Wolf.","damage","Melee",45,"player","Wolf")
 COMBATHITSELFOTHER="You hit %s for %d."
 R.BuildRules()
 assert(R.Parse("You hit Wolf for 100X")==nil)
--- Opening hits, both full and partial avoidance, ticks, heals, effect counts.
+-- Opening hits while the combat flag is already active, before the event.
+fighting=true
 emit("CHAT_MSG_COMBAT_SELF_HITS","You hit Wolf for 100.")
 assert(R.current and R.current.damage==100)
 fighting=true; emit("PLAYER_REGEN_DISABLED")
@@ -153,17 +154,17 @@ emit("SPELLCAST_START","Heal",2000); now=102; emit("SPELLCAST_STOP")
 assert(f.casts.Heal.count==1)
 emit("SPELLCAST_START","Fireball",3000); now=103; emit("SPELLCAST_INTERRUPTED"); emit("SPELLCAST_STOP")
 assert(not f.casts.Fireball)
--- Stop grace period; resume combat does not split the encounter.
-fighting=false; emit("PLAYER_REGEN_ENABLED"); now=103.5; R.Tick(now); assert(R.current)
-fighting=true; emit("PLAYER_REGEN_DISABLED"); now=104; R.Tick(now); assert(R.current==f)
-fighting=false; emit("PLAYER_REGEN_ENABLED"); now=105.1; R.Tick(now)
-assert(not R.current and R.history[1]==f and f.duration==4)
--- Out-of-combat heals do not overwrite last fight. Opening buffered cast is retained.
+-- Combat exit closes immediately; idle damage and casts never create reports.
+fighting=false; emit("PLAYER_REGEN_ENABLED")
+assert(not R.current and R.history[1]==f and f.duration==3)
 now=107; emit("CHAT_MSG_SPELL_SELF_BUFF","Your Heal heals you for 500.")
-assert(not R.current and f.healing==40)
+emit("CHAT_MSG_COMBAT_MISC_INFO","You fall and lose 100 health.")
 now=111; R.Record({kind="cast",source="player",spell="Bolt"})
+R.Record({kind="damage",source="Environment",target="player",spell="FALLING",amount=100})
+assert(not R.current and R.history[1]==f and f.healing==40 and table.getn(R.pending)==0)
+fighting=true; emit("PLAYER_REGEN_DISABLED")
 now=111.5; emit("CHAT_MSG_COMBAT_SELF_HITS","You hit Wolf for 2.")
-assert(R.current.casts.Bolt.count==1 and R.current.healing==0)
+assert(not R.current.casts.Bolt and R.current.taken==0)
 -- Nampower's server event confirms requests once; proc events never become casts.
 GetSpellRecField=function(id) return "Bolt" end
 GetCVar=function() return "1" end
@@ -171,7 +172,7 @@ emit("PLAYER_LOGIN")
 emit("SPELL_CAST_EVENT",1,123,1)
 emit("SPELL_GO_SELF",0,123,"playerguid","targetguid",0,3,0)
 emit("SPELL_GO_SELF",0,123,"playerguid","targetguid",0,3,0)
-assert(R.current.casts.Bolt.count==2)
+assert(R.current.casts.Bolt.count==1)
 emit("SPELL_GO_SELF",456,124,"playerguid","targetguid",0,1,0)
 assert(R.current.effects["Bolt [item trigger]"].source=="Item #456")
 -- Bounded history, timeline, and every UI tab with actual data.
@@ -184,7 +185,7 @@ R.Finish(now)
 for i=1,9 do now=now+5; R.Start(now); R.Record({kind="damage",source="player",target="Wolf",amount=1}); R.Finish(now+1) end
 assert(table.getn(R.history)==11)
 R.view=5; R.Refresh(); R.view=0; R.Refresh()
-print("PASS: parser, attribution, mitigation, casts, buffering, fight lifecycle, bounded history/timeline, and UI smoke tests")
+print("PASS: parser, attribution, mitigation, casts, combat-only boundaries, fight lifecycle, bounded history/timeline, and UI smoke tests")
 ''')
 lua.execute('''
 -- Resource events use the stock displayed pool, not raw tenths of rage.
@@ -197,8 +198,8 @@ function powerEvent(ev,unit)
   event=ev or "UNIT_MANA"; arg1=unit or "player"
   R.resourceEvents.scripts.OnEvent()
 end
-R.pending={}; fighting=false; powerEvent("PLAYER_LOGIN")
-powerValue=900; powerEvent() -- opening cast before combat
+R.pending={}; fighting=true; powerEvent("PLAYER_LOGIN")
+powerValue=900; powerEvent() -- spending while combat flag is active
 now=now+.2; fighting=true; R.Start(now)
 local f=R.current
 assert(f.resources.Mana.spent==100)
@@ -247,7 +248,7 @@ assert(table.getn(R.pending)==0) -- no idle rage-decay buffering
 R.view=1; R.Refresh()
 f.resources=nil; R.Refresh() -- old saved report migration / rendering
 assert(string.find(R.window.metrics.text,"older fight"))
-print("PASS: mana/rage/energy, opener buffering, gains, duplicate/non-player events, forms, capacity, death, combat-end exclusion, saved resource-only fights and old-report UI")
+print("PASS: mana/rage/energy, in-combat spending, gains, duplicate/non-player events, forms, capacity, death, combat-end exclusion, saved resource-only fights and old-report UI")
 ''')
 lua.execute('''
 -- Recovery is combat-only; health observations and named heals overlap but are not summed.

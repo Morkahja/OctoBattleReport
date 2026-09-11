@@ -32,11 +32,7 @@ function R.Start(now)
   R.current=R.New(now)
   if R.CaptureBaseline then R.current.baseline=R.CaptureBaseline() end
   if R.view~=-1 then R.view=0; R.offset=0 end
-  local pending=R.pending
   R.pending={}
-  for _, e in ipairs(pending) do
-    if now-e.time <= 2 then R.Record(e, true) end
-  end
 end
 function R.Finish(now, silent)
   local f=R.current
@@ -71,15 +67,11 @@ function R.Timeline(f, e)
   if e.source=="player" then f.timeline[i].damage=f.timeline[i].damage+(e.amount or 0) end
   if e.target=="player" then f.timeline[i].taken=f.timeline[i].taken+(e.amount or 0) end
 end
-function R.Record(e, buffered)
+function R.Record(e)
   e.time=e.time or GetTime()
   local hostile=e.kind=="damage" or e.kind=="miss"
   if not R.current then
-    if hostile or UnitAffectingCombat("player") then R.Start(e.time)
-    elseif not buffered then
-      table.insert(R.pending,e)
-      while table.getn(R.pending)>24 or (R.pending[1] and e.time-R.pending[1].time>2) do table.remove(R.pending,1) end
-      return
+    if UnitAffectingCombat("player") then R.Start(e.time)
     else return end
   end
   local f=R.current
@@ -188,7 +180,6 @@ function R.Duration(f)
 end
 function R.Tick(now)
   if R.current and not UnitAffectingCombat("player") then
-    if R.ending and now-R.ending>=1 then R.Finish(R.ending)
-    elseif not R.ending and now-R.current.last>=3 then R.Finish(R.current.last) end
+    R.Finish(now)
   end
 end

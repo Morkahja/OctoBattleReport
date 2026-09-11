@@ -27,10 +27,6 @@ function R.SampleResource(reset)
     end
   elseif UnitAffectingCombat("player") then
     R.Record({kind="resource",source="player",resource=names[kind],spent=math.max(0,-change),gained=math.max(0,change),recentSpend=recent})
-  elseif change<0 and kind==0 then
-    -- Mana is commonly deducted just before the opening hit/combat-state event.
-    -- Buffer it briefly; never buffer out-of-combat rage decay or regeneration.
-    R.Record({kind="resource",source="player",resource=names[kind],spent=-change,gained=0})
   end
 end
 function R.SampleHealth(reset)
